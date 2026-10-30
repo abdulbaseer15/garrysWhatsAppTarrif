@@ -524,6 +524,26 @@
                 text-decoration: none;
             }
 
+        /* ---------- Date picker ---------- */
+        .wa-datebox { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+        .wa-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+        .wa-quick-btn {
+            background: #fff; border: 1px solid var(--wa-line); color: var(--wa-text);
+            border-radius: 16px; padding: 7px 15px; font-size: 13.5px; font-weight: 600;
+            cursor: pointer; transition: background .2s, border-color .2s, color .2s;
+        }
+        .wa-quick-btn:hover { background: #e1f5fe; border-color: #b3e5fc; color: #01579b; }
+        .wa-quick-btn.primary { background: var(--wa-teal); border-color: var(--wa-teal); color: #fff; }
+        .wa-quick-btn.primary:hover { background: var(--wa-teal-dark); border-color: var(--wa-teal-dark); color: #fff; }
+        .wa-selects { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .wa-selects select {
+            border: 1px solid var(--wa-line); background: #fff; border-radius: 8px;
+            padding: 8px 10px; font: inherit; font-size: 14.5px; color: var(--wa-text); cursor: pointer;
+        }
+        .wa-selects select:focus-visible { outline: 2px solid var(--wa-teal); }
+        .wa-datepreview { font-weight: 600; color: var(--wa-teal-dark); margin-left: 6px; }
+        .wa-datepreview.err { color: #c62828; }
+
         @@media (max-width: 860px) {
             .wa-side {
                 display: none;
@@ -694,10 +714,33 @@
                     <i class="fa-regular fa-face-smile ico"></i>
                     <i class="fa-solid fa-plus ico"></i>
 
-                    @if (!ended && (Model.CurrentStep == 4 || Model.CurrentStep == 5))
+                  @if (!ended && (Model.CurrentStep == 4 || Model.CurrentStep == 5))
 {
-    <!-- Date Picker for Dispatch Date (Step 4) and Arrival Date (Step 5) -->
-    <input type="date" id="dateInput" class="wa-date-input" required />
+    bool isPayment = Model.CurrentStep == 5;
+    @* Step 4 = Arrival Date, Step 5 = Payment Date *@
+    <input type="hidden" id="dateInput" />
+    <div class="wa-datebox" id="dateBox" data-step="@Model.CurrentStep" data-min="@(Model.TempDispatchDate.ToString("yyyy-MM-dd"))">
+        <div class="wa-quick">
+            @if (isPayment)
+            {
+                <button type="button" class="wa-quick-btn primary" onclick="pickQuick(0)"><i class="fa-regular fa-calendar-check"></i> Today <span id="todayLabel"></span></button>
+                <button type="button" class="wa-quick-btn" onclick="toggleCustom()"><i class="fa-regular fa-calendar"></i> Choose another date</button>
+            }
+            else
+            {
+                <button type="button" class="wa-quick-btn" onclick="pickQuick(0)">Today</button>
+                <button type="button" class="wa-quick-btn" onclick="pickQuick(1)">Yesterday</button>
+                <button type="button" class="wa-quick-btn" onclick="pickQuick(3)">3 days ago</button>
+                <button type="button" class="wa-quick-btn" onclick="pickQuick(7)">1 week ago</button>
+            }
+        </div>
+        <div class="wa-selects" id="customDate" style="@(isPayment ? "display:none" : "")">
+            <select id="selDay" aria-label="Day"></select>
+            <select id="selMonth" aria-label="Month"></select>
+            <select id="selYear" aria-label="Year"></select>
+            <span class="wa-datepreview" id="datePreview"></span>
+        </div>
+    </div>
 }
 else
 {
@@ -705,7 +748,7 @@ else
            placeholder="@(ended ? "You can't reply to this conversation" : "Type a message or select an option...")"
            @(ended ? "disabled" : "") />
 }
-                    <button type="submit" class="wa-send" aria-label="Send" @(ended ? "disabled" : "") onclick="prepareSubmit()">
+                        <button type="submit" class="wa-send" aria-label="Send" @(ended ? "disabled" : "") onclick="return prepareSubmit()">
                         <i class="fa-solid fa-paper-plane"></i>
                     </button>
                 </form>
@@ -733,17 +776,93 @@ else
             form.submit();
         }
 
-    function prepareSubmit() {
-    var dateInput = document.getElementById("dateInput");
-    var userInput = document.getElementById("userInput");
-    var hiddenInput = document.getElementById("hiddenInput");
+                  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                var dateIsValid = true;
 
-    if (dateInput) {
-        hiddenInput.value = dateInput.value;
-    } else if (userInput) {
-        hiddenInput.value = userInput.value;
-    }
-}
+                function pad(n) { return (n < 10 ? "0" : "") + n; }
+                function toIso(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+                function toNice(d) { return pad(d.getDate()) + " " + MONTHS[d.getMonth()] + " " + d.getFullYear(); }
+                function startOfToday() { var t = new Date(); return new Date(t.getFullYear(), t.getMonth(), t.getDate()); }
+
+                function initDatePicker() {
+                    var selDay = document.getElementById("selDay");
+                    var selMonth = document.getElementById("selMonth");
+                    var selYear = document.getElementById("selYear");
+                    var today = startOfToday();
+                    var i;
+
+                    for (i = 1; i <= 31; i++) { selDay.add(new Option(pad(i), i)); }
+                    for (i = 0; i < 12; i++) { selMonth.add(new Option(MONTHS[i], i)); }
+                    for (i = today.getFullYear(); i >= today.getFullYear() - 1; i--) { selYear.add(new Option(i, i)); }
+
+                    selDay.value = today.getDate();
+                    selMonth.value = today.getMonth();
+                    selYear.value = today.getFullYear();
+
+                    [selDay, selMonth, selYear].forEach(function (s) { s.addEventListener("change", updateDate); });
+
+                    var tl = document.getElementById("todayLabel");
+                    if (tl) { tl.textContent = "(" + toNice(today) + ")"; }
+                    updateDate();
+                }
+
+                function updateDate() {
+                    var box = document.getElementById("dateBox");
+                    var selDay = document.getElementById("selDay");
+                    var selMonth = document.getElementById("selMonth");
+                    var selYear = document.getElementById("selYear");
+                    var preview = document.getElementById("datePreview");
+
+                    var y = parseInt(selYear.value, 10), m = parseInt(selMonth.value, 10), d = parseInt(selDay.value, 10);
+                    var lastDay = new Date(y, m + 1, 0).getDate();
+                    if (d > lastDay) { d = lastDay; selDay.value = d; }
+                    var date = new Date(y, m, d);
+
+                    var msg = "";
+                    var step = box.getAttribute("data-step");
+                    if (step === "4" && date > startOfToday()) {
+                        msg = "Arrival date cannot be in the future";
+                    }
+                    if (step === "5") {
+                        var min = box.getAttribute("data-min");
+                        if (min && toIso(date) < min) { msg = "Payment date must be on or after the arrival date"; }
+                    }
+
+                    dateIsValid = (msg === "");
+                    preview.textContent = msg !== "" ? msg : toNice(date);
+                    preview.className = "wa-datepreview" + (msg !== "" ? " err" : "");
+                    document.getElementById("dateInput").value = toIso(date);
+                }
+
+                function pickQuick(daysAgo) {
+                    var d = startOfToday();
+                    d.setDate(d.getDate() - daysAgo);
+                    document.getElementById("hiddenInput").value = toIso(d);
+                    showTyping();
+                    form.submit();
+                }
+
+                function toggleCustom() {
+                    var c = document.getElementById("customDate");
+                    c.style.display = (c.style.display === "none") ? "flex" : "none";
+                }
+
+                function prepareSubmit() {
+                    var dateInput = document.getElementById("dateInput");
+                    var userInput = document.getElementById("userInput");
+                    var hiddenInput = document.getElementById("hiddenInput");
+
+                    if (dateInput) {
+                        updateDate();
+                        if (!dateIsValid) { return false; }
+                        hiddenInput.value = dateInput.value;
+                    } else if (userInput) {
+                        hiddenInput.value = userInput.value;
+                    }
+                    return true;
+                }
+
+                if (document.getElementById("dateBox")) { initDatePicker(); }
 
         form.addEventListener("submit", showTyping);
     </script>
