@@ -1,0 +1,751 @@
+﻿@model WhatsAppTariffDemo.Models.ChatSessionState
+@using System.Text.Json
+@using System.Text.RegularExpressions
+@using System.Net
+
+@functions {
+    // Turns bot text into WhatsApp-style formatting: *bold* / **bold**, line breaks, and removes stray markers
+    static string Fmt(string text, bool isHtml)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        text = Regex.Replace(text, @"\s*\[cite:\s*[\d,\s]+\]", "");
+        var s = isHtml ? text : WebUtility.HtmlEncode(text);
+        s = Regex.Replace(s, @"\*\*(.+?)\*\*", "<b>$1</b>");
+        s = Regex.Replace(s, @"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", "<b>$1</b>");
+        s = s.Replace("\r\n", "\n").Trim().Replace("\n", "<br/>");
+        return s;
+    }
+}
+
+@{
+    ViewData["Title"] = "Gerry's dnata Tariff Bot";
+    Layout = null;
+    bool ended = Model.IsEscalated || Model.IsCompleted;
+    string prevSender = null;
+    string lastTime = Model.Messages.Count > 0 ? Model.Messages[Model.Messages.Count - 1].Time : "";
+    var lastMsg = Model.Messages.LastOrDefault();
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gerry's dnata - WhatsApp Tariff Bot</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --wa-teal: #00a884;
+            --wa-teal-dark: #008069;
+            --wa-panel: #f0f2f5;
+            --wa-chat-bg: #efeae2;
+            --wa-in: #ffffff;
+            --wa-out: #d9fdd3;
+            --wa-text: #111b21;
+            --wa-sub: #667781;
+            --wa-line: #e9edef;
+            --wa-tick: #53bdeb;
+            --wa-chip: #ffeecd;
+            --wa-chip-text: #54656f;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 14.2px;
+            color: var(--wa-text);
+            background: #d1d7db;
+        }
+
+        /* WhatsApp Web's green strip behind the app */
+        .wa-backdrop {
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(180deg, var(--wa-teal) 127px, #d1d7db 127px);
+        }
+
+        .wa-app {
+            position: relative;
+            display: flex;
+            height: calc(100vh - 38px);
+            max-width: 1400px;
+            margin: 19px auto;
+            background: #fff;
+            box-shadow: 0 6px 18px rgba(11, 20, 26, .2);
+            overflow: hidden;
+        }
+
+        /* ---------- Left panel ---------- */
+        .wa-side {
+            width: 30%;
+            min-width: 300px;
+            max-width: 420px;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--wa-line);
+            background: #fff;
+        }
+
+        .wa-side-head {
+            height: 59px;
+            background: var(--wa-panel);
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            gap: 14px;
+            color: var(--wa-sub);
+        }
+
+            .wa-side-head .me {
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                background: #dfe5e7;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #fff;
+                font-size: 20px;
+            }
+
+            .wa-side-head .spacer {
+                flex: 1;
+            }
+
+            .wa-side-head i {
+                font-size: 18px;
+            }
+
+        .wa-search {
+            padding: 8px 12px;
+            background: #fff;
+            border-bottom: 1px solid var(--wa-line);
+        }
+
+            .wa-search div {
+                background: var(--wa-panel);
+                border-radius: 8px;
+                padding: 7px 14px;
+                color: var(--wa-sub);
+                font-size: 13.5px;
+                display: flex;
+                gap: 14px;
+                align-items: center;
+            }
+
+        .wa-chat-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 0 15px;
+            height: 72px;
+            cursor: default;
+            border-bottom: 1px solid var(--wa-line);
+        }
+
+            .wa-chat-item.active {
+                background: var(--wa-panel);
+            }
+
+        .wa-avatar {
+            width: 49px;
+            height: 49px;
+            border-radius: 50%;
+            flex: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 22px;
+        }
+
+        .av-bot {
+            background: var(--wa-teal);
+        }
+
+        .av-agent {
+            background: #5e6f7a;
+        }
+
+        .wa-chat-meta {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .wa-chat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+
+        .wa-chat-name {
+            font-size: 16.5px;
+            color: var(--wa-text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .wa-chat-time {
+            font-size: 12px;
+            color: var(--wa-sub);
+            flex: none;
+            margin-left: 8px;
+        }
+
+            .wa-chat-time.unread {
+                color: var(--wa-teal);
+            }
+
+        .wa-chat-preview {
+            font-size: 13.8px;
+            color: var(--wa-sub);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 2px;
+        }
+
+        .wa-badge {
+            background: var(--wa-teal);
+            color: #fff;
+            border-radius: 50%;
+            min-width: 20px;
+            height: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 8px;
+        }
+
+        .wa-side-foot {
+            margin-top: auto;
+            padding: 14px 18px;
+            font-size: 12px;
+            color: var(--wa-sub);
+            background: var(--wa-panel);
+        }
+
+        /* ---------- Chat panel ---------- */
+        .wa-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .wa-head {
+            height: 59px;
+            background: var(--wa-panel);
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            gap: 15px;
+            border-bottom: 1px solid var(--wa-line);
+        }
+
+            .wa-head .wa-avatar {
+                width: 40px;
+                height: 40px;
+                font-size: 19px;
+            }
+
+        .wa-head-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .wa-head-name {
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .wa-verified {
+            color: var(--wa-teal);
+            font-size: 14px;
+        }
+
+        .wa-head-status {
+            font-size: 13px;
+            color: var(--wa-sub);
+            margin-top: 1px;
+        }
+
+        .wa-head-actions {
+            display: flex;
+            gap: 22px;
+            color: var(--wa-sub);
+            font-size: 17px;
+            align-items: center;
+        }
+
+        .wa-attempts {
+            font-size: 12px;
+            background: #fff;
+            border-radius: 12px;
+            padding: 3px 10px;
+            color: var(--wa-sub);
+            border: 1px solid var(--wa-line);
+        }
+
+            .wa-attempts b {
+                color: var(--wa-text);
+            }
+
+        .wa-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 18px 7% 14px;
+            background-color: var(--wa-chat-bg);
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><g fill='none' stroke='%23d5cdbf' stroke-width='1.4' opacity='.55'><circle cx='18' cy='20' r='5'/><path d='M62 14l8 8m0-8l-8 8'/><rect x='88' y='12' width='12' height='9' rx='2'/><path d='M14 70q6-8 12 0t12 0'/><circle cx='70' cy='64' r='3'/><path d='M96 62l7 7-7 7-7-7z'/><path d='M26 104h14M33 97v14'/><circle cx='86' cy='104' r='5'/></g></svg>");
+        }
+
+        .wa-chip {
+            display: table;
+            margin: 6px auto 10px;
+            background: #fff;
+            color: var(--wa-chip-text);
+            font-size: 12.5px;
+            padding: 5px 12px;
+            border-radius: 7.5px;
+            box-shadow: 0 1px .5px rgba(11, 20, 26, .13);
+            text-transform: uppercase;
+        }
+
+            .wa-chip.note {
+                background: var(--wa-chip);
+                text-transform: none;
+                text-align: center;
+                max-width: 560px;
+                line-height: 1.4;
+                font-size: 12.3px;
+            }
+
+        .wa-row {
+            display: flex;
+            margin-bottom: 2px;
+        }
+
+            .wa-row.out {
+                justify-content: flex-end;
+            }
+
+            .wa-row.first {
+                margin-top: 10px;
+            }
+
+        .wa-msg {
+            position: relative;
+            max-width: 65%;
+            padding: 6px 7px 8px 9px;
+            border-radius: 7.5px;
+            box-shadow: 0 1px .5px rgba(11, 20, 26, .13);
+            font-size: 14.2px;
+            line-height: 19px;
+            word-wrap: break-word;
+        }
+
+            .wa-msg.in {
+                background: var(--wa-in);
+            }
+
+            .wa-msg.out {
+                background: var(--wa-out);
+            }
+
+            .wa-msg.in.tail {
+                border-top-left-radius: 0;
+            }
+
+            .wa-msg.out.tail {
+                border-top-right-radius: 0;
+            }
+
+            .wa-msg.in.tail::before {
+                content: "";
+                position: absolute;
+                top: 0;
+                left: -8px;
+                border-top: 0 solid transparent;
+                border-right: 8px solid var(--wa-in);
+                border-bottom: 13px solid transparent;
+            }
+
+            .wa-msg.out.tail::before {
+                content: "";
+                position: absolute;
+                top: 0;
+                right: -8px;
+                border-top: 0 solid transparent;
+                border-left: 8px solid var(--wa-out);
+                border-bottom: 13px solid transparent;
+            }
+
+        .wa-sender {
+            font-size: 12.8px;
+            font-weight: 600;
+            color: var(--wa-teal-dark);
+            margin-bottom: 2px;
+        }
+
+        .wa-text b {
+            font-weight: 600;
+        }
+
+        .wa-meta {
+            float: right;
+            margin: 6px 0 -5px 12px;
+            font-size: 11px;
+            color: var(--wa-sub);
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            line-height: 15px;
+        }
+
+            .wa-meta .fa-check-double {
+                color: var(--wa-tick);
+                font-size: 11px;
+            }
+
+        .wa-msg.receipt {
+            max-width: 440px;
+            width: 100%;
+        }
+
+        /* Quick reply chips inside message for stations/cargo */
+        .wa-options-box {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .wa-option-btn {
+            background: #e1f5fe;
+            border: 1px solid #b3e5fc;
+            color: #01579b;
+            border-radius: 15px;
+            padding: 5px 14px;
+            font-size: 13px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+
+            .wa-option-btn:hover {
+                background: #b3e5fc;
+            }
+
+        /* ---------- Composer ---------- */
+        .wa-foot {
+            background: var(--wa-panel);
+            padding: 10px 16px;
+        }
+
+            .wa-foot form {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                margin: 0;
+            }
+
+            .wa-foot .ico {
+                color: var(--wa-sub);
+                font-size: 22px;
+                width: 26px;
+                text-align: center;
+            }
+
+        .wa-input, .wa-date-input {
+            flex: 1;
+            border: 0;
+            outline: 0;
+            background: #fff;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font: inherit;
+            font-size: 15px;
+            color: var(--wa-text);
+        }
+
+            .wa-input:disabled {
+                background: #fff;
+                color: var(--wa-sub);
+            }
+
+            .wa-input::placeholder {
+                color: var(--wa-sub);
+            }
+
+        .wa-send {
+            border: 0;
+            background: none;
+            color: var(--wa-sub);
+            font-size: 21px;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+
+            .wa-send:not(:disabled) {
+                color: var(--wa-teal);
+            }
+
+            .wa-send:disabled {
+                cursor: not-allowed;
+                opacity: .6;
+            }
+
+            .wa-send:focus-visible, .wa-input:focus-visible, .wa-date-input:focus-visible {
+                outline: 2px solid var(--wa-teal);
+            }
+
+        .wa-ended {
+            background: var(--wa-panel);
+            text-align: center;
+            color: var(--wa-sub);
+            font-size: 13.5px;
+            padding: 6px 16px 14px;
+        }
+
+            .wa-ended a {
+                color: #027eb5;
+                text-decoration: none;
+            }
+
+        @@media (max-width: 860px) {
+            .wa-side {
+                display: none;
+            }
+
+            .wa-app {
+                height: 100vh;
+                margin: 0;
+            }
+
+            .wa-backdrop {
+                display: none;
+            }
+
+            .wa-body {
+                padding: 14px 4%;
+            }
+
+            .wa-msg {
+                max-width: 85%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="wa-backdrop"></div>
+
+    <div class="wa-app">
+
+        <!-- ============ Chat list ============ -->
+        <aside class="wa-side">
+            <div class="wa-side-head">
+                <div class="me"><i class="fa-solid fa-user"></i></div>
+                <div class="spacer"></div>
+                <i class="fa-solid fa-circle-notch" title="Status"></i>
+                <i class="fa-regular fa-message" title="New chat"></i>
+                <i class="fa-solid fa-ellipsis-vertical" title="Menu"></i>
+            </div>
+
+            <div class="wa-search">
+                <div><i class="fa-solid fa-magnifying-glass"></i> Search or start a new chat</div>
+            </div>
+
+            <div class="wa-chat-item active">
+                <div class="wa-avatar av-bot"><i class="fa-brands fa-whatsapp"></i></div>
+                <div class="wa-chat-meta">
+                    <div class="wa-chat-row">
+                        <span class="wa-chat-name">Gerry's dnata Tariff Bot <i class="fa-solid fa-circle-check wa-verified"></i></span>
+                        <span class="wa-chat-time">@lastTime</span>
+                    </div>
+                    <div class="wa-chat-row">
+                        <span class="wa-chat-preview">Import cargo storage estimate</span>
+                    </div>
+                </div>
+            </div>
+<div class="wa-chat-item @(Model.IsEscalated ? "active" : "")" 
+     style="@(Model.IsEscalated ? "cursor: pointer; background: #f0f2f5;" : "cursor: not-allowed; opacity: 0.6;")" 
+     @if(Model.IsEscalated) { <text>onclick="window.open('https://wa.me/923039200623?text=Hello%2C%20I%20need%20help%20with%20Cargo%20Ops%20Escalation', '_blank')"</text> }>
+    <div class="wa-avatar av-agent"><i class="fa-solid fa-headset"></i></div>
+    <div class="wa-chat-meta">
+        <div class="wa-chat-row">
+            <span class="wa-chat-name">Cargo Ops Desk</span>
+            @if (Model.IsEscalated)
+            {
+                <span class="wa-chat-time unread">@lastTime</span>
+            }
+        </div>
+        <div class="wa-chat-row">
+            <span class="wa-chat-preview">
+                @(Model.IsEscalated ? "New case handed over from Tariff Bot" : "Locked (Available on escalation)")
+            </span>
+            @if (Model.IsEscalated)
+            {
+                <span class="wa-badge">1</span>
+            }
+        </div>
+    </div>
+</div>
+
+            <div class="wa-side-foot"><i class="fa-solid fa-lock"></i>&nbsp; Pan Pakistan hubs: KHI, LHE, ISB, MUX</div>
+        </aside>
+
+        <!-- ============ Conversation ============ -->
+        <section class="wa-main">
+
+            <header class="wa-head">
+                <div class="wa-avatar av-bot"><i class="fa-brands fa-whatsapp"></i></div>
+                <div class="wa-head-info">
+                    <div class="wa-head-name">Gerry's dnata Tariff Bot <i class="fa-solid fa-circle-check wa-verified" title="Verified business account"></i></div>
+                    <div class="wa-head-status" id="statusLine">
+                        @(Model.IsEscalated ? "Handed over to Cargo Ops agent" : "Business account · online")
+                    </div>
+                </div>
+                <div class="wa-head-actions">
+                    <span class="wa-attempts" title="Invalid AWB attempts before agent handover">Attempts <b>@Model.AttemptCount/3</b></span>
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <i class="fa-solid fa-ellipsis-vertical"></i>
+                </div>
+            </header>
+
+            <div class="wa-body" id="chatScrollArea">
+
+                <div class="wa-chip">Today</div>
+
+                <div class="wa-chip note">
+                    <i class="fa-solid fa-lock"></i>
+                    This chat is with a verified business account. Storage estimates are indicative; final charges are confirmed at the terminal.
+                </div>
+
+                <div class="wa-chip note">
+                    Demo: enter an invalid AWB 3 times to see the handover to a Cargo Ops agent.
+                </div>
+
+                @foreach (var msg in Model.Messages)
+                {
+                    bool isBot = msg.Sender == "Bot";
+                    bool tail = prevSender != msg.Sender;
+                    bool isReceipt = isBot && msg.Text != null && msg.Text.Contains("Tariff Calculation");
+                    string cls = (isBot ? "in" : "out") + (tail ? " tail" : "") + (isReceipt ? " receipt" : "");
+
+                    <div class="wa-row @(isBot ? "in" : "out") @(tail ? "first" : "")">
+                        <div class="wa-msg @cls">
+                            @if (isBot && tail)
+                            {
+                                <div class="wa-sender">Gerry's dnata</div>
+                            }
+                            <span class="wa-text">@Html.Raw(Fmt(msg.Text, msg.IsHtml))</span>
+
+                            <!-- Option Buttons inside bot message if provided -->
+                            @if (isBot && msg.Options != null && msg.Options.Count > 0 && !ended)
+                            {
+                                <div class="wa-options-box">
+                                    @foreach (var opt in msg.Options)
+                                    {
+                                        <button type="button" class="wa-option-btn" onclick="submitOption('@opt')">@opt</button>
+                                    }
+                                </div>
+                            }
+
+                            <span class="wa-meta">
+                                @msg.Time
+                                @if (!isBot)
+                                {
+                                    <i class="fa-solid fa-check-double"></i>
+                                }
+                            </span>
+                        </div>
+                    </div>
+
+                    prevSender = msg.Sender;
+                }
+
+            </div>
+
+            @if (ended)
+            {
+                <div class="wa-ended">
+                    @(Model.IsEscalated ? "A Cargo Ops agent will continue this conversation." : "This conversation has ended.")
+                    <a href="@Url.Action("Index")">Start a new chat</a>
+                </div>
+            }
+
+            <footer class="wa-foot">
+                <form asp-action="Index" method="post" id="chatForm">
+                    <input type="hidden" name="stateJson" value="@JsonSerializer.Serialize(Model)" />
+                    <input type="hidden" name="userInput" id="hiddenInput" />
+
+                    <i class="fa-regular fa-face-smile ico"></i>
+                    <i class="fa-solid fa-plus ico"></i>
+
+                    @if (!ended && (Model.CurrentStep == 4 || Model.CurrentStep == 5))
+{
+    <!-- Date Picker for Dispatch Date (Step 4) and Arrival Date (Step 5) -->
+    <input type="date" id="dateInput" class="wa-date-input" required />
+}
+else
+{
+    <input type="text" id="userInput" class="wa-input" required autocomplete="off"
+           placeholder="@(ended ? "You can't reply to this conversation" : "Type a message or select an option...")"
+           @(ended ? "disabled" : "") />
+}
+                    <button type="submit" class="wa-send" aria-label="Send" @(ended ? "disabled" : "") onclick="prepareSubmit()">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </form>
+            </footer>
+
+        </section>
+    </div>
+
+    <script>
+        var chatArea = document.getElementById("chatScrollArea");
+        chatArea.scrollTop = chatArea.scrollHeight;
+
+        var form = document.getElementById("chatForm");
+        var status = document.getElementById("statusLine");
+
+        function showTyping() {
+            if (status) {
+                status.innerHTML = 'typing<span class="wa-typing-dots"><span>.</span><span>.</span><span>.</span></span>';
+            }
+        }
+
+        function submitOption(val) {
+            document.getElementById("hiddenInput").value = val;
+            showTyping();
+            form.submit();
+        }
+
+    function prepareSubmit() {
+    var dateInput = document.getElementById("dateInput");
+    var userInput = document.getElementById("userInput");
+    var hiddenInput = document.getElementById("hiddenInput");
+
+    if (dateInput) {
+        hiddenInput.value = dateInput.value;
+    } else if (userInput) {
+        hiddenInput.value = userInput.value;
+    }
+}
+
+        form.addEventListener("submit", showTyping);
+    </script>
+</body>
+</html>

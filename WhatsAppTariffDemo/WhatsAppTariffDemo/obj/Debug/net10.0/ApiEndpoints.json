@@ -1,0 +1,23 @@
+[
+  {
+    "ContainingType": "WhatsAppTariffDemo.Controllers.WhatsAppWebhookController",
+    "Method": "ReceiveMessage",
+    "RelativePath": "api/whatsapp",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "Body",
+        "Type": "System.String",
+        "IsRequired": false
+      },
+      {
+        "Name": "From",
+        "Type": "System.String",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  }
+]

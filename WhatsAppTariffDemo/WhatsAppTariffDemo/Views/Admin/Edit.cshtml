@@ -1,0 +1,153 @@
+﻿@model WhatsAppTariffDemo.Models.TariffRuleModel
+
+@{
+    ViewData["Title"] = "Edit Tariff Rule";
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Edit Tariff Rule - Gerry's dnata Admin</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <style>
+            :root {
+                --wa-teal: #00a884;
+                --wa-teal-dark: #008069;
+                --wa-panel: #f0f2f5;
+            }
+
+            body {
+                background-color: #d1d7db;
+                font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+                color: #111b21;
+            }
+
+            .wa-admin-card {
+                background: #ffffff;
+                border-radius: 12px;
+                box-shadow: 0 6px 20px rgba(11, 20, 26, 0.15);
+                border-top: 5px solid var(--wa-teal);
+            }
+
+            .btn-wa-primary {
+                background-color: var(--wa-teal);
+                border-color: var(--wa-teal);
+                color: #fff;
+                font-weight: 600;
+            }
+
+                .btn-wa-primary:hover {
+                    background-color: var(--wa-teal-dark);
+                    border-color: var(--wa-teal-dark);
+                    color: #fff;
+                }
+
+            .form-control:focus, .form-select:focus {
+                border-color: var(--wa-teal);
+                box-shadow: 0 0 0 0.25rem rgba(0, 168, 132, 0.25);
+            }
+
+            .header-icon {
+                color: var(--wa-teal-dark);
+            }
+    </style>
+</head>
+<body>
+    <div class="container my-5" style="max-width: 680px;">
+        <div class="card wa-admin-card p-4 p-md-5">
+            <div class="d-flex align-items-center mb-4 pb-3 border-bottom">
+                <div class="fs-2 me-3 header-icon">
+                    <i class="fa-brands fa-whatsapp"></i>
+                </div>
+                <div>
+                    <h3 class="fw-bold mb-1 text-dark">Edit Tariff Rule</h3>
+                    <p class="text-muted mb-0 small">Gerry's dnata Import Cargo Management Portal</p>
+                </div>
+            </div>
+
+            <form asp-action="Edit" method="post">
+                <input type="hidden" asp-for="RuleId" />
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold text-secondary">Station Code</label>
+                        <select asp-for="StationCode" class="form-select" required>
+                            <option value="">-- Select Station --</option>
+                            <option value="KHI">KHI (Karachi)</option>
+                            <option value="LHE">LHE (Lahore)</option>
+                            <option value="ISB">ISB (Islamabad)</option>
+                            <option value="MUX">MUX (Multan)</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold text-secondary">Cargo Type</label>
+                        <select asp-for="CargoType" class="form-select" required>
+                            <option value="">-- Select Cargo Type --</option>
+                            <option value="General">General</option>
+                            <option value="Special">Special</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold text-secondary">Free Days</label>
+                        <input asp-for="FreeDays" type="number" class="form-control" required min="0" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold text-secondary">Rate Per Kg (PKR)</label>
+                        <input asp-for="RatePerKg" type="number" step="0.01" class="form-control" required min="1" />
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold text-secondary">Minimum Charge (PKR)</label>
+                        <input asp-for="MinimumCharge" type="number" step="0.01" class="form-control" required min="1" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold text-secondary">Tax Percentage (%)</label>
+                        <input asp-for="TaxPercentage" type="number" step="0.01" class="form-control" required min="0" max="100" />
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold text-secondary">Min Weight Slab (Kg)</label>
+                        <input asp-for="MinWeightSlab" type="number" step="0.01" class="form-control" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold text-secondary">Max Weight Slab (Kg)</label>
+                        <input asp-for="MaxWeightSlab" type="number" step="0.01" class="form-control" />
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold text-secondary">Effective Start Date</label>
+                        <input asp-for="EffectiveStartDate" type="date" class="form-control" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold text-secondary">Effective End Date</label>
+                        <input asp-for="EffectiveEndDate" type="date" class="form-control" />
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label fw-semibold text-secondary">Handling / Documentation Charges (PKR)</label>
+                    <input asp-for="HandlingCharges" type="number" step="0.01" class="form-control" />
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                    <a asp-action="Index" class="btn btn-outline-secondary px-4"><i class="fa-solid fa-arrow-left me-1"></i> Back to List</a>
+                    <button type="submit" class="btn btn-wa-primary px-4"><i class="fa-solid fa-floppy-disk me-1"></i> Update Rule</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
